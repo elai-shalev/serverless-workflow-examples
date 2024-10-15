@@ -1,0 +1,49 @@
+openapi: 3.0.3
+info:
+  title: Terraform Cloud API
+  version: v2
+servers:
+  - url: https://archivist.terraform.io
+security:
+  - BearerToken: []
+paths:
+  /v1/object/{archiveURL}:
+    put:
+      description: Upload URL
+      operationId: uploadUrl
+      parameters:
+        - name: archiveURL
+          in: path
+          required: true
+          schema: {}
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              #$ref: "#/components/schemas/binaryRequest"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/runResponse"
+        "400":
+          description: IDK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/runResponse"
+components:
+  schemas:
+    runResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+    binaryRequest:
+      type: string

@@ -1,0 +1,138 @@
+specVersion: "0.8"
+id: terraform
+version: 0.0.1
+name: Terraform
+description: "Workflow showcasing Terraform"
+start: GetUploadURL
+extensions:
+  - extensionid: workflow-uri-definitions
+    definitions:
+      notifications: https://raw.githubusercontent.com/parodos-dev/serverless-workflows/main/shared/specs/notifications-openapi.yaml
+annotations:
+  - "workflow-type/infrastructure"
+dataInputSchema: schemas/terraform-input-schema.json
+functions:
+  - name: listConfigurationVersions
+    operation: specs/terraform-openapi.yaml#listConfigurationVersions
+  - name: createNotification
+    operation: notifications#createNotification
+  - name: uploadUrl
+    operation: specs/terraform-archive-openapi.yaml#uploadUrl
+  - name: getRun
+    operation: specs/terraform-openapi.yaml#getRun
+  - name: ReadFile
+    type: custom
+    operation: "service:java:io.janus.workflow.terraform.FileReader::ReadFile"
+  - name: logInfo
+    type: custom
+    operation: "sysout:INFO"
+  - name: extractURL
+    type: expression
+    operation: '.configurationVersions.data.attributes."upload-url" | split("/object/") | .[1]'
+states:
+  - name: GetUploadURL
+    type: operation
+    actions:
+      - functionRef:
+          refName: listConfigurationVersions
+          arguments:
+            workspaceId: .workspaceId
+            data:
+              type: "configuration-versions"
+        actionDataFilter:
+          toStateData: .configurationVersions
+      - functionRef:
+          refName: logInfo
+          arguments:
+            message: .configurationVersions
+      - functionRef:
+          refName: extractURL
+        actionDataFilter:
+          toStateData: .extractedURL
+    transition: UploadConfigurationFile
+
+  - name: UploadConfigurationFile
+    type: operation
+    actions:
+      - name: convertFileToBytes
+        functionRef:
+          refName: ReadFile
+          arguments:
+            filePath: $SECRET.content_directory
+        actionDataFilter:
+          toStateData: .compressedFileBytes
+
+      - name: log
+        functionRef:
+          refName: logInfo
+          arguments:
+            message: .compressedFileBytes | type
+
+      - name: uploadBytesToArchive
+        functionRef:
+          refName: uploadUrl
+          arguments:
+            archiveURL: .extractedURL
+            data-binary: .compressedFileBytes
+        actionDataFilter:
+          toStateData: .launchedRun
+    transition: GetTerraformRun
+
+  - name: GetTerraformRun
+    type: operation
+    actions:
+      - functionRef:
+          refName: getRun
+          arguments:
+            #runId: .launchedRun.id # Maybe?
+            runId: run-AggbFvamdoQQqhiV
+        sleep:
+          after: PT15S
+        actionDataFilter:
+          toStateData: .terraformRun
+    transition: IsRunDone
+
+  - name: IsRunDone
+    type: switch
+    dataConditions:
+      - condition: (.terraformRun.status == "applied")
+        transition:
+          nextState: SendSuccessNotification
+      - condition: (.terraformRun.status == "errored" | .terraformRun.status == "discarded" )
+        transition:
+          nextState: SendFailureNotification
+    defaultCondition:
+      transition: GetTerraformRun
+
+  - name: SendFailureNotification
+    type: operation
+    actions:
+      - functionRef:
+          refName: createNotification
+          arguments:
+            recipients:
+              type: entity
+              entityRef: ['"user:"+.backstageUser']
+            payload:
+              title: '"Terraform Job Workflow " + $WORKFLOW.instanceId + " Failed"'
+              description: '"Terraform job workflow id: " + $WORKFLOW.instanceId + " for job template id: .terraformPlanName + " failed."'
+              scope: "Terraform Job Workflow"
+              topic: "Terraform Job Workflow"
+              link: .launchedJob.outputUrl
+    end: true
+  - name: SendSuccessNotification
+    type: operation
+    actions:
+      - functionRef:
+          refName: createNotification
+          arguments:
+            recipients:
+              type: entity
+              entityRef: ['"user:"+.backstageUser']
+            payload:
+              title: '"Terraform Job Workflow " + $WORKFLOW.instanceId + " Succeeded"'
+              description: '"Terraform job workflow id: " + $WORKFLOW.instanceId + " for terraform plan .terraformPlanName + " succeeded."'
+              scope: "Terraform Job Workflow"
+              topic: "Terraform Job Workflow"
+              link: .launchedJob.outputUrl
+    end: true
