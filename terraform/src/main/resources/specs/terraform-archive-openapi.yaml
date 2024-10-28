@@ -18,10 +18,13 @@ paths:
           schema: {}
       requestBody:
         content:
-          application/octet-stream:
+          multipart/form-data:
             schema:
-              type: string
-              format: binary
+              type: object
+              properties:
+                dataBinary:
+                  type: string
+                  format: binary
               #$ref: "#/components/schemas/binaryRequest"
       responses:
         "200":

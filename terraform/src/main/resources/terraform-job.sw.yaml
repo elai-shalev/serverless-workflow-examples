@@ -18,11 +18,13 @@ functions:
     operation: notifications#createNotification
   - name: uploadUrl
     operation: specs/terraform-archive-openapi.yaml#uploadUrl
-  - name: getRun
+  - name: getWorkspaceInfo
+    operation: specs/terraform-openapi.yaml#getWorkspaceInfo
+  - name: getTerraformRun
     operation: specs/terraform-openapi.yaml#getRun
-  - name: ReadFile
+  - name: HandleTerraformConfigUpload
     type: custom
-    operation: "service:java:io.janus.workflow.terraform.FileReader::ReadFile"
+    operation: "service:java:io.janus.workflow.terraform.HandleTerraformConfigUpload::ReadAndUploadTerraformConfig"
   - name: logInfo
     type: custom
     operation: "sysout:INFO"
@@ -49,45 +51,41 @@ states:
           refName: extractURL
         actionDataFilter:
           toStateData: .extractedURL
-    transition: UploadConfigurationFile
+    transition: HandleTerraformConfigUpload
 
-  - name: UploadConfigurationFile
+  - name: HandleTerraformConfigUpload
     type: operation
     actions:
-      - name: convertFileToBytes
+      - name: HandleTerraformConfigUpload
         functionRef:
-          refName: ReadFile
+          refName: HandleTerraformConfigUpload
           arguments:
             filePath: $SECRET.content_directory
-        actionDataFilter:
-          toStateData: .compressedFileBytes
-
-      - name: log
-        functionRef:
-          refName: logInfo
-          arguments:
-            message: .compressedFileBytes | type
-
-      - name: uploadBytesToArchive
-        functionRef:
-          refName: uploadUrl
-          arguments:
-            archiveURL: .extractedURL
-            data-binary: .compressedFileBytes
-        actionDataFilter:
-          toStateData: .launchedRun
+            archiveURL: .configurationVersions.data.attributes."upload-url"
     transition: GetTerraformRun
 
   - name: GetTerraformRun
     type: operation
     actions:
       - functionRef:
-          refName: getRun
+          refName: logInfo
           arguments:
-            #runId: .launchedRun.id # Maybe?
-            runId: run-AggbFvamdoQQqhiV
+            message: '"Sleeping before checking the run ID "'
+
         sleep:
           after: PT15S
+
+      - functionRef:
+          refName: getWorkspaceInfo
+          arguments:
+            workspaceId: .workspaceId
+        actionDataFilter:
+          toStateData: .workspaceInfo
+
+      - functionRef:
+          refName: getTerraformRun
+          arguments:
+            runId: .workspaceInfo.data.relationships."latest-run".data.id
         actionDataFilter:
           toStateData: .terraformRun
     transition: IsRunDone
@@ -95,10 +93,10 @@ states:
   - name: IsRunDone
     type: switch
     dataConditions:
-      - condition: (.terraformRun.status == "applied")
+      - condition: (.terraformRun.data.attributes.status == "applied")
         transition:
           nextState: SendSuccessNotification
-      - condition: (.terraformRun.status == "errored" | .terraformRun.status == "discarded" )
+      - condition: (.terraformRun.data.attributes.status == "errored")
         transition:
           nextState: SendFailureNotification
     defaultCondition:
