@@ -2,7 +2,7 @@ specVersion: "0.8"
 id: terraform
 version: 0.0.1
 name: Terraform
-description: "Workflow showcasing Terraform"
+description: "Workflow that provisions infrastructure using Terraform Cloud API"
 start: GetUploadURL
 extensions:
   - extensionid: workflow-uri-definitions
@@ -12,31 +12,31 @@ annotations:
   - "workflow-type/infrastructure"
 dataInputSchema: schemas/terraform-input-schema.json
 functions:
-  - name: listConfigurationVersions
+  - name: getUploadURL
     operation: specs/terraform-openapi.yaml#listConfigurationVersions
-  - name: createNotification
-    operation: notifications#createNotification
   - name: uploadUrl
     operation: specs/terraform-archive-openapi.yaml#uploadUrl
   - name: getWorkspaceInfo
     operation: specs/terraform-openapi.yaml#getWorkspaceInfo
-  - name: getTerraformRun
+  - name: getLatestTerraformRun
     operation: specs/terraform-openapi.yaml#getRun
   - name: HandleTerraformConfigUpload
     type: custom
-    operation: "service:java:io.janus.workflow.terraform.HandleTerraformConfigUpload::ReadAndUploadTerraformConfig"
+    operation: "service:java:io.janus.workflow.terraform.HandleTerraformConfigUpload::UploadTerraformConfig"
   - name: logInfo
     type: custom
     operation: "sysout:INFO"
   - name: extractURL
     type: expression
     operation: '.configurationVersions.data.attributes."upload-url" | split("/object/") | .[1]'
+  - name: createNotification
+    operation: notifications#createNotification
 states:
   - name: GetUploadURL
     type: operation
     actions:
       - functionRef:
-          refName: listConfigurationVersions
+          refName: getUploadURL
           arguments:
             workspaceId: .workspaceId
             data:
@@ -71,10 +71,8 @@ states:
           refName: logInfo
           arguments:
             message: '"Sleeping before checking the run ID "'
-
         sleep:
           after: PT15S
-
       - functionRef:
           refName: getWorkspaceInfo
           arguments:
@@ -83,7 +81,7 @@ states:
           toStateData: .workspaceInfo
 
       - functionRef:
-          refName: getTerraformRun
+          refName: getLatestTerraformRun
           arguments:
             runId: .workspaceInfo.data.relationships."latest-run".data.id
         actionDataFilter:

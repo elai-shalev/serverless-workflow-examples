@@ -23,40 +23,7 @@ import java.io.InputStreamReader;
 
 @ApplicationScoped
 public class HandleTerraformConfigUpload {
-
-    public String ReadAndUploadTerraformConfig(String filePath, String archiveURL) {
-
-        // byte[] file = ReadConfigFile(filePath);
-        String res = Try(archiveURL, filePath);
-        return res;
-
-    }
-
-    /*
-     * public byte[] ReadConfigFile(String filePath) {
-     * try {
-     * byte[] fileBytes = Files.readAllBytes(Paths.get(filePath));
-     * return fileBytes;
-     * } catch (IOException e) {
-     * throw new RuntimeException("Error: could not read file", e);
-     * }
-     * }
-     * 
-     * public boolean UploadConfigFile(byte[] fileBytes) {
-     * HttpRequest request = HttpRequest.newBuilder().PUT(null)
-     * .uri(archiveURL)
-     * .timeout(Duration.ofMinutes(2))
-     * .header("Content-Type", "application/octet-stream")
-     * .PUT(BodyPublishers.ofFile(Paths.get("file.json")))
-     * .build();
-     * client.sendAsync(request, BodyHandlers.ofString())
-     * .thenApply(HttpResponse.body)
-     * .thenAccept(System.out.println);
-     * return true;
-     * }
-     */
-
-    public String Try(String archiveURL, String filePath) {
+    public int UploadTerraformConfig(String configFilePath, String archiveURL) {
 
         try {
             URI uri = new URI(archiveURL);
@@ -69,7 +36,7 @@ public class HandleTerraformConfigUpload {
             OutputStream outputStream = connection.getOutputStream();
             DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
 
-            FileInputStream fileInputStream = new FileInputStream(filePath);
+            FileInputStream fileInputStream = new FileInputStream(configFilePath);
             byte[] buffer = new byte[1024];
             int bytesRead;
 
@@ -81,19 +48,13 @@ public class HandleTerraformConfigUpload {
             dataOutputStream.close();
             fileInputStream.close();
 
-            int responseCode = connection.getResponseCode();
-            System.out.println(responseCode);
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                System.out.println("Success");
-            }
-            return "";
+            return connection.getResponseCode();
         }
 
         catch (Exception e) {
             e.printStackTrace();
-            return "";
+            return -1;
         }
-
 
     }
 
